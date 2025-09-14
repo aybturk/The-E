@@ -1,8 +1,10 @@
-# secrets 
-CLAID/claid.secrets.json
-.env
+# macOS
+.DS_Store
 
-# python cache
+# Python
 __pycache__/
 *.pyc
 
+# Üretilen çıktılar (takip etmek istemiyoruz)
+TheProd/output/
+TheImage/pubimg/images/

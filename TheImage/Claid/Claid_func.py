@@ -1,7 +1,6 @@
 from typing import Optional, Dict, Any
 import requests
-from Claid.keys import Keys
-
+from .keys import Keys
 
 class ClaidFunc:
     """Minimal Claid API wrapper for BG remove + AI background."""
