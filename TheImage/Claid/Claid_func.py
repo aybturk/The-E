@@ -164,9 +164,9 @@ class ClaidFunc:
 
         Args:
             object_image_url: Cutout image URL (transparent preferred).
-            use_autoprompt: Let Claid generate prompt from guidelines.
-            guidelines: Guidance text (used when use_autoprompt=True).
-            prompt: Explicit prompt (required if use_autoprompt=False).
+            use_autoprompt: If True, let Claid generate a prompt based on `guidelines`.
+            guidelines: Guidance text used when use_autoprompt=True.
+            prompt: Explicit scene prompt used when use_autoprompt=False.
             model: Claid scene model, e.g., 'v2'.
             aspect_ratio: e.g., '1:1', '9:7', '16:9' etc.
             number_of_images: How many images to generate.
@@ -176,6 +176,10 @@ class ClaidFunc:
             scale: Object scale (0.40–0.95). Lower => smaller product.
             position: Dict with 'x' and 'y' in [0..1].
             output_format: 'png' recommended.
+
+        Precedence:
+            - If use_autoprompt=True: use {'generate': True, 'guidelines': ...}
+            - Else (use_autoprompt=False): use the explicit `prompt` string (required).
 
         Returns:
             Dict containing Claid 'data' plus normalized list at data['tmp_urls'].
@@ -196,6 +200,7 @@ class ClaidFunc:
         else:
             prompt_block = prompt  # plain string
 
+        # Note: When passing a plain string in 'scene.prompt', Claid treats it as an explicit prompt.
         payload = {
             "object": {
                 "image_url": object_image_url,
