@@ -27,10 +27,10 @@ from TheProd.PromtMaker import PromtMaker  # Gemini-based prompt generator
 S3_BUCKET   = os.getenv("THEE_S3_BUCKET",   "the-e-assets")
 S3_REGION   = os.getenv("THEE_S3_REGION",   "eu-north-1")
 
-IMAGES_DIR  = ROOT / "TheImage" / "pubimg" / "images"   # input folder to watch/pick
+IMAGES_DIR  = ROOT / "TheImage" / "pubimg" / "images"   # input folder to pick from
 OUTPUT_DIR  = ROOT / "TheProd" / "output"               # where we save generated results
 
-# Guidance (used only when Claid autoprompt is enabled, we keep for future toggles)
+# Guidance (kept for possible autoprompt toggles)
 GUIDELINES = os.getenv(
     "THEE_GUIDELINES",
     "minimal studio, soft daylight, light wood tabletop, photorealistic"
@@ -94,12 +94,12 @@ class PicPre:
     """
     End-to-end pipeline:
 
-      images/ → (ImagePrep.prepare) → prepped file (local)
-               → S3 upload → public URL
-               → Claid remove_background (cutout URL)
-               → Gemini prompt(s) from local prepped file
-               → Claid add_background (explicit prompt), for each aspect
-               → Download finals to output/
+      image (local) → (ImagePrep.prepare) → prepped file (local)
+                    → S3 upload → public URL
+                    → Claid remove_background (cutout URL)
+                    → Gemini prompt(s) from local prepped file
+                    → Claid add_background (explicit prompt), for each aspect
+                    → Download finals to output/
 
     Configurability:
       - ratios: list of aspect ratios (e.g., ["1:1","9:7"]). Default from THEE_ASPECTS or ["1:1","1:1"]
@@ -128,25 +128,42 @@ class PicPre:
         self.default_scale = default_scale
         self.default_y = default_y
 
-    def run(self) -> Dict[str, Any]:
-        """Run full pipeline for the latest image in IMAGES_DIR."""
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+    # ---------- Public entrypoints ----------
 
-        # 1) Pick latest image
+    def run(self) -> Dict[str, Any]:
+        """Process the latest image from IMAGES_DIR (default behavior)."""
         src = _latest_image_in(self.images_dir)
         if not src:
             raise FileNotFoundError(f"Görsel bulunamadı: {self.images_dir}")
         print(f"🖼  Son görsel: {src.name}")
+        return self._pipeline(src)
 
-        # 2) Pre-Claid prepping (resize/denoise/sharpen/format)
+    def run_for_image(self, image_path: str) -> Dict[str, Any]:
+        """
+        Process a specific image given by absolute/relative path.
+        This mirrors the same steps as `run()` but skips folder picking.
+        """
+        src = pathlib.Path(image_path).expanduser().resolve()
+        if not src.exists():
+            raise FileNotFoundError(f"Image not found: {src}")
+        print(f"🖼  Seçilen görsel: {src.name}")
+        return self._pipeline(src)
+
+    # ---------- Core pipeline ----------
+
+    def _pipeline(self, src: pathlib.Path) -> Dict[str, Any]:
+        """Shared core pipeline that both run() and run_for_image() use."""
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+
+        # 1) Pre-Claid prepping (resize/denoise/sharpen/format)
         prepped_path, prep_report = self.prep.prepare(src)
         print(f"🧼 Prepped image: {pathlib.Path(prepped_path).name}")
 
-        # 3) Upload to S3 (Claid will consume this public URL)
+        # 2) Upload to S3 (Claid will consume this public URL)
         s3_url = self._ensure_s3_url(pathlib.Path(prepped_path))
         print(f"☁️  S3 URL: {s3_url}")
 
-        # 3.5) Generate two diverse Gemini prompts from local prepped image
+        # 3) Generate two diverse Gemini prompts from local prepped image
         prompts_overrides = self._gemini_prompts_from_local(str(prepped_path))
 
         # 4) Remove background (transparent cutout URL)
@@ -311,7 +328,11 @@ class PicPre:
 
 def main() -> None:
     pp = PicPre()
-    result = pp.run()
+    # CLI mode: optional image path
+    if len(sys.argv) > 1:
+        result = pp.run_for_image(sys.argv[1])
+    else:
+        result = pp.run()
     print("\n✅ Tamamlandı.\n")
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
