@@ -12,6 +12,24 @@ from typing import Any, Dict, Optional
 from google.cloud import aiplatform
 from vertexai.generative_models import GenerativeModel, Part, SafetySetting, HarmCategory
 
+# ---- SABİTLER (senin GCP projen) ----
+# GCP Console ekranındaki Project ID:
+GCP_PROJECT_ID = "melodic-splicer-449022-g3"
+# Vertex AI konumu (istemezsen böyle kalsın):
+GCP_VERTEX_REGION = "us-central1"
+# İsteğe bağlı: modeli de sabitleyebiliriz
+GEMINI_MODEL_NAME = "gemini-2.0-flash"
+
+
+def _ensure_env_vars() -> None:
+    """
+    Ortam değişkenleri set değilse kod içinde set et.
+    Güvenlik sebebiyle normalde .env / gcloud önerilir; burada senin isteğinle sabitliyoruz.
+    """
+    os.environ.setdefault("PROJECT_ID", GCP_PROJECT_ID)
+    os.environ.setdefault("GOOGLE_CLOUD_PROJECT", GCP_PROJECT_ID)
+    os.environ.setdefault("VERTEXAI_REGION", GCP_VERTEX_REGION)
+
 
 @dataclass
 class PromtResult:
@@ -29,29 +47,31 @@ class PromtMaker:
       - Ask for a strict JSON with {subject, claid_prompt, product_summary}.
       - Return a normalized result ready for Claid addBackground.
 
-    Environment:
-      - PROJECT_ID: GCP project id (fallback to gcloud default if not set)
-      - VERTEXAI_REGION: Vertex AI location (default: us-central1)
-      - GOOGLE_APPLICATION_CREDENTIALS: service-account JSON (local dev)
+    Environment (bu sınıfta default’lanır):
+      - PROJECT_ID / GOOGLE_CLOUD_PROJECT: GCP project id
+      - VERTEXAI_REGION: Vertex AI location
+      - GOOGLE_APPLICATION_CREDENTIALS: (gerekirse) service-account JSON path
     """
 
     def __init__(
         self,
         project_id: Optional[str] = None,
         region: Optional[str] = None,
-        model_name: str = "gemini-2.0-flash",
+        model_name: str = GEMINI_MODEL_NAME,
     ):
+        _ensure_env_vars()
+
         self.project_id = project_id or os.getenv("PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
         if not self.project_id:
-            raise RuntimeError(
-                "PROJECT_ID is not set. Export PROJECT_ID or run `gcloud config set project ...`."
-            )
-        self.region = region or os.getenv("VERTEXAI_REGION") or "us-central1"
+            raise RuntimeError("PROJECT_ID is not set and fallback failed.")
 
+        self.region = region or os.getenv("VERTEXAI_REGION") or GCP_VERTEX_REGION
+
+        # Vertex AI init
         aiplatform.init(project=self.project_id, location=self.region)
         self.model = GenerativeModel(model_name)
 
-        # Reasonable safety settings that avoid over-blocking
+        # Reasonable safety settings
         self.safety = [
             SafetySetting(
                 category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
@@ -111,8 +131,6 @@ class PromtMaker:
             "Prefer studio-like phrasing (clean, minimal, soft light, natural shadows) unless the subject clearly suggests a different context. "
             "Avoid hallucinations: if uncertain, say 'unknown' for that part."
         )
-
-        # Optional stylistic guidance for prompt diversification
         if style_hint:
             user_task += f" Style preference: {style_hint.strip()}"
 
@@ -169,16 +187,17 @@ class PromtMaker:
 
 if __name__ == "__main__":
     import sys
+    _ensure_env_vars()
+
     if len(sys.argv) < 2:
         print("Usage: python -m TheProd.PromtMaker /path/to/image.(jpg|png)")
         raise SystemExit(1)
 
     maker = PromtMaker(
-        project_id=os.getenv("PROJECT_ID"),
-        region=os.getenv("VERTEXAI_REGION") or "us-central1",
-        model_name="gemini-2.0-flash",
+        project_id=GCP_PROJECT_ID,
+        region=GCP_VERTEX_REGION,
+        model_name=GEMINI_MODEL_NAME,
     )
-
     result = maker.analyze_and_prompt(sys.argv[1])
     print(json.dumps({
         "subject": result.subject,
