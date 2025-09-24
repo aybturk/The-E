@@ -99,12 +99,16 @@ class DescMaker:
         )
 
         guidelines = (
-            "Title (US English): 100–130 characters, readable, include product, material/finish, "
-            "color/tone, style, primary use. No keyword stuffing, no brand names.\n"
-            "Description: 3 short paragraphs — (1) aesthetic & use, (2) materials/size/variations, "
-            "(3) care/packaging/shipping. Short sentences; no pricing/guarantees. End with a friendly CTA.\n"
-            "Never assert specs that clearly contradict the images. If a provided fact seems uncertain, "
-            "express it cautiously (e.g., 'approximately', 'designed for')."
+            "Title (US English): 110–140 characters, highly readable, optimized for Etsy/eBay SEO. "
+            "Include product type, key material/finish, color/tone, style, and primary use. "
+            "Front‑load important keywords, but keep it human and natural. No brand names.\n"
+            "Description: 3 short but vivid paragraphs — (1) compelling lifestyle/aesthetic hook + main use case, "
+            "(2) specific details: materials, dimensions, variations, unique craftsmanship, "
+            "(3) care, packaging, shipping, and a persuasive closing call‑to‑action.\n"
+            "Use energetic, sensory language (textures, moods, occasions). "
+            "Think like a top‑tier Etsy/eBay seller: highlight versatility, gifting potential, décor value. "
+            "Never fabricate facts that clearly contradict the images. If uncertain, phrase cautiously (e.g., 'approximately', 'designed for'). "
+            "No pricing or guarantees. End with an inviting CTA."
         )
 
         extra = ""
@@ -126,7 +130,12 @@ class DescMaker:
         resp = self.model.generate_content(
             content_parts,
             safety_settings=self.safety,
-            generation_config={"temperature": 0.5, "max_output_tokens": 700},
+            generation_config={
+                "temperature": 0.7,
+                "top_p": 0.9,
+                "top_k": 40,
+                "max_output_tokens": 900,
+            },
         )
 
         raw = (resp.text or "").strip()

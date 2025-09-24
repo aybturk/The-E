@@ -42,7 +42,7 @@ class PromtResult:
 
 class PromtMaker:
     """
-    Minimal one-shot multimodal pipeline for PromtMaker:
+    Creative multimodal prompt maker for background generation:
       - Send the image to Gemini 2.0 Flash (Vertex AI).
       - Ask for a strict JSON with {subject, claid_prompt, product_summary}.
       - Return a normalized result ready for Claid addBackground.
@@ -97,12 +97,14 @@ class PromtMaker:
         self,
         image_path: str,
         *,
-        temperature: float = 0.4,
-        style_hint: Optional[str] = None
+        temperature: float = 0.7,
+        style_hint: Optional[str] = None,
+        prompt_words: int = 60,
     ) -> PromtResult:
         """
         Analyze the image and craft a Claid-ready background prompt.
         `temperature` controls creativity; `style_hint` nudges stylistic choices.
+        `prompt_words` targets the length of the background description (default ~60 words).
         """
         img_path = pathlib.Path(image_path).expanduser()
         if not img_path.exists():
@@ -115,24 +117,27 @@ class PromtMaker:
         img_part = Part.from_data(mime_type=mime, data=img_path.read_bytes())
 
         system = (
-            "You are an expert e-commerce visual prompt engineer. "
-            "You receive an input image (product/lifestyle) and must output a STRICT JSON block with "
-            "three fields tailored for a background-generation API (e.g., Claid addBackground):\n"
-            "1) subject: a concise subject name (e.g., 'matte black wireless earbuds').\n"
-            "2) claid_prompt: ONE short action-ready prompt for background generation, "
-            "   focusing on style, ambiance, surface, lighting; avoid camera jargon unless obvious; "
-            "   no brand names; keep it SFW; ~15–30 words.\n"
-            "3) product_summary: 1–2 short sentences summarizing the item/material/color.\n"
-            "Output format MUST be pure JSON, no markdown fences, no extra text."
+            "You are an expert e‑commerce visual prompt engineer. "
+            "You receive a product image and must output a STRICT JSON object tailored for a background generation API (e.g., Claid addBackground). "
+            "Fields: \n"
+            "1) subject: concise item name (e.g., 'matte black wireless earbuds').\n"
+            "2) claid_prompt: ONE vivid, cohesive scene description of ~" + str(prompt_words) + " words (±15). "
+            "   Describe: environment/context, surface/material under the product, lighting mood & direction, shadows/reflections, depth of field, color palette/harmony, and overall style (studio/editorial/lifestyle). "
+            "   Be imaginative but truthful to the image; no brand names or logos; no camera jargon unless clearly implied; SFW. Avoid clutter, busy patterns, extreme props, text overlays, or watermark‑like elements.\n"
+            "3) product_summary: 1–2 concise sentences summarizing item/material/color.\n"
+            "Output MUST be pure JSON (no markdown fences, no extra prose)."
         )
 
         user_task = (
-            "Analyze the product in the image and produce the JSON. "
-            "Prefer studio-like phrasing (clean, minimal, soft light, natural shadows) unless the subject clearly suggests a different context. "
-            "Avoid hallucinations: if uncertain, say 'unknown' for that part."
+            "Analyze the product and compose the JSON. "
+            "For claid_prompt, write a single paragraph that reads like a creative art director note. "
+            "Lead with the scene (space/ambience), then the surface, then lighting & shadows, then palette and finishing touches. "
+            "Prefer natural language over technical terms. Be specific about textures (e.g., travertine, light oak, linen, matte ceramic) and light quality (soft daylight, window side‑light, gentle falloff). "
+            "Keep it tasteful and production‑ready."
         )
         if style_hint:
-            user_task += f" Style preference: {style_hint.strip()}"
+            user_task += " Strong style preference: " + style_hint.strip()
+        user_task += " Compose around " + str(prompt_words) + " words."
 
         resp = self.model.generate_content(
             [
@@ -142,7 +147,12 @@ class PromtMaker:
                 'Return JSON like: {"subject":"...", "claid_prompt":"...", "product_summary":"..."}',
             ],
             safety_settings=self.safety,
-            generation_config={"temperature": float(temperature), "max_output_tokens": 256},
+            generation_config={
+                "temperature": float(temperature),
+                "top_p": 0.9,
+                "top_k": 40,
+                "max_output_tokens": 512,
+            },
         )
 
         raw = (resp.text or "").strip()
@@ -155,8 +165,9 @@ class PromtMaker:
         if not claid_prompt:
             base = subject if subject and subject != "unknown" else "product"
             claid_prompt = (
-                f"clean minimal studio background for {base}, soft lighting, natural shadows, "
-                f"subtle gradient backdrop, premium look"
+                f"elegant studio scene for {base}; light oak tabletop with gentle texture; "
+                f"soft daylight from the left creating realistic shadows and a calm gradient backdrop; "
+                f"subtle reflection; cohesive neutral palette with one warm accent; uncluttered, premium, photorealistic"
             )
 
         return PromtResult(
